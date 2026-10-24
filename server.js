@@ -9,7 +9,7 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
     const pathname = decodeURIComponent(url.pathname);
-    if (pathname !== '/' && !/^\/(index\.html|styles\.css|app\.js|icon\.svg|icon-(192|512)\.png|manifest\.webmanifest|sw\.js|src\/model\.js)$/.test(pathname)) {
+    if (pathname !== '/' && !/^\/(index\.html|styles\.css|app\.js|icon\.svg|icon-(192|512)\.png|manifest\.webmanifest|sw\.js|src\/(model|cloud)\.js)$/.test(pathname)) {
       res.writeHead(404).end('Not found'); return;
     }
     const file = path.join(root, pathname === '/' ? 'index.html' : pathname.slice(1));

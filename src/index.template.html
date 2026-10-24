@@ -2,6 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="Класс"><link rel="apple-touch-icon" href="./icon-192.png">
   <meta name="theme-color" content="#315c49"><meta name="description" content="Ученики, группы и посещаемость в одном месте">
   <link rel="icon" href="/icon.svg" type="image/svg+xml"><link rel="manifest" href="/manifest.webmanifest">
   <link rel="stylesheet" href="/styles.css"><title>Класс — журнал учеников</title>
@@ -12,12 +13,13 @@
     <div class="workspace"><span class="workspace-icon">У</span><div>Учебное пространство<small>Личный журнал</small></div></div>
     <span class="nav-label">УПРАВЛЕНИЕ</span>
     <nav aria-label="Основная навигация"><button class="nav-item active" data-view="attendance"><span>▦</span>Посещаемость</button><button class="nav-item" data-view="students"><span>♧</span>Ученики <b id="nav-count">0</b></button></nav>
-    <div class="side-bottom"><span class="local-dot"></span> Данные на этом устройстве<p>Сохраняйте резервные копии,<br>чтобы не потерять свой журнал.</p><button id="export" class="backup-button">↗ Экспорт данных</button><button id="import" class="backup-button">↙ Импорт копии</button><input type="file" id="import-file" accept="application/json,.json" hidden></div>
+    <div class="side-bottom"><span class="local-dot"></span> <span id="storage-location">Данные на этом устройстве</span><p>Сохраняйте резервные копии,<br>чтобы не потерять свой журнал.</p><button id="export" class="backup-button">↗ Экспорт данных</button><button id="import" class="backup-button">↙ Импорт копии</button><input type="file" id="import-file" accept="application/json,.json" hidden></div>
   </aside>
   <div class="main-shell">
-    <header class="topbar"><span>Моё пространство <span class="slash">/</span> <strong id="breadcrumb">Посещаемость</strong></span><span class="profile">У</span></header>
+    <header class="topbar"><span>Моё пространство <span class="slash">/</span> <strong id="breadcrumb">Посещаемость</strong></span><button id="account-button" class="button secondary">Вход и синхронизация</button></header>
     <main>
       <div class="heading"><div><div class="eyebrow">ВАШ УЧЕБНЫЙ РИТМ</div><h1 id="page-title">Посещаемость</h1><p id="page-description">Каждый ученик на виду. Каждое занятие под контролем.</p></div><button id="add-student" class="button primary"><span>＋</span> Добавить ученика</button></div>
+      <section class="sync-panel" aria-label="Синхронизация"><div><strong id="sync-title">Локальный журнал</strong><p id="sync-message">Облачная база не подключена. На разных устройствах записи пока отдельные.</p></div><button id="refresh-cloud" class="button secondary" hidden>Обновить</button></section>
       <div id="storage-warning" class="storage-warning" role="status" hidden></div>
       <section class="stats" aria-label="Статистика">
         <article class="stat"><div class="stat-label">Всего учеников <span class="stat-icon">♧</span></div><div class="stat-number" id="total">0</div><div class="stat-caption" id="group-summary">В ваших группах</div></article>
@@ -35,6 +37,7 @@
     </main>
   </div>
   <dialog id="student-dialog"><form id="student-form"><div class="dialog-heading"><div><div class="eyebrow">КАРТОЧКА УЧЕНИКА</div><h2 id="dialog-title">Новый ученик</h2></div><button type="button" id="close-dialog" class="icon-button" aria-label="Закрыть">×</button></div><label>Имя и фамилия<input name="name" maxlength="100" required placeholder="Например, Алина Соколова" autocomplete="name"></label><label>Группа<input name="group" maxlength="60" required list="groups" placeholder="Например, Английский · A1"><datalist id="groups"></datalist></label><div class="form-row"><label>Дата присоединения<input name="joined" type="date" required></label><label>Телефон<input name="phone" type="tel" maxlength="40" placeholder="+996 …" autocomplete="tel"></label></div><label class="checkbox-label"><input name="deposit" type="checkbox"><span>Депозит пополнен<small>Можно изменить в любой момент</small></span></label><p class="form-error" id="form-error" role="alert"></p><div class="dialog-actions"><button type="button" id="delete-student" class="button danger" hidden>Удалить</button><button type="button" id="cancel-dialog" class="button secondary">Отмена</button><button type="submit" id="save-student" class="button primary">Сохранить</button></div></form></dialog>
+  <dialog id="account-dialog"><div class="dialog-heading"><h2>Аккаунт и синхронизация</h2><button type="button" id="close-account" class="icon-button" aria-label="Закрыть аккаунт">×</button></div><p id="account-description" class="account-description"></p><form id="account-form"><label>Email<input type="email" name="email" required autocomplete="username" maxlength="254"></label><label>Пароль<input type="password" name="password" required minlength="8" autocomplete="current-password"></label><div class="dialog-actions"><button type="button" id="signup" class="button secondary">Создать аккаунт</button><button type="submit" id="signin" class="button primary">Войти</button></div></form><p id="account-error" class="form-error" role="alert"></p><button id="signout" class="button secondary" hidden>Выйти из аккаунта</button></dialog>
   <dialog id="confirm-dialog"><form method="dialog"><h2 id="confirm-title">Подтверждение</h2><p id="confirm-text"></p><div class="dialog-actions"><button value="cancel" class="button secondary">Отмена</button><button value="confirm" class="button primary">Подтвердить</button></div></form></dialog>
   <div id="toast" role="status" aria-live="polite" hidden></div>
   <script type="module" src="/app.js"></script>
