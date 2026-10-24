@@ -1,6 +1,7 @@
 import { readFile, writeFile, mkdir, copyFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { zipFiles } from './zip.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const read = file => readFile(path.join(root, file), 'utf8');
@@ -18,4 +19,7 @@ await writeFile(path.join(root, 'index.html'), portable);
 // Hosts can serve this directory directly, including from a subdirectory.
 await writeFile(path.join(root, 'dist/index.html'), portable.replace('</head>', '<meta name="classroom-hosted" content="true">\n</head>'));
 await Promise.all(['icon.svg', 'icon-192.png', 'icon-512.png', 'manifest.webmanifest', 'sw.js'].map(file => copyFile(path.join(root, file), path.join(root, 'dist', file))));
-console.log('Built standalone index.html and static hosting files in dist/. No external dependencies.');
+const files = await Promise.all(['index.html', 'icon.svg', 'icon-192.png', 'icon-512.png', 'manifest.webmanifest', 'sw.js'].map(async name => ({ name, data: await readFile(path.join(root, 'dist', name)) })));
+const archive = zipFiles(files);
+await Promise.all(['classroom-netlify.zip', 'classroom-site.zip'].map(name => writeFile(path.join(root, name), archive)));
+console.log('Built standalone index.html, dist/, and Netlify-ready ZIP archives with index.html at the archive root.');
