@@ -1,0 +1,15 @@
+{
+  "name": "classroom-attendance",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.js",
+    "prestart": "npm run build",
+    "start": "node server.js",
+    "predev": "npm run build",
+    "dev": "node --watch server.js",
+    "test": "node --test"
+  },
+  "engines": { "node": ">=20" }
+}
