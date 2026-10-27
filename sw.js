@@ -1,4 +1,4 @@
-const CACHE = `classroom-v3-${self.registration.scope}`;
+const CACHE = `classroom-v4-${self.registration.scope}`;
 const ASSETS = ['./', './index.html', './icon.svg', './icon-192.png', './icon-512.png', './manifest.webmanifest'].map(file => new URL(file, self.registration.scope).href);
 self.addEventListener('install', event => { event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS))); });
 self.addEventListener('activate', event => { event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => (k === 'classroom-v1' || k.endsWith(self.registration.scope)) && k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });

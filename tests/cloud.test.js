@@ -155,3 +155,23 @@ test('in-memory sessions work when a preview denies storage access', async () =>
   await client.signIn('test@example.com', 'password');
   assert.deepEqual(await client.load(), envelope);
 });
+
+
+test('old cloud responses require SQL migration instead of silently downgrading typed attendance', async () => {
+  const oldEnvelope = { state: { version: 1, students: [], attendance: {} }, revision: 7 };
+  const client = new CloudClient({ url, key, storage: null, fetchImpl: async () => json(oldEnvelope) });
+  client.session = session();
+  await assert.rejects(client.load(), error => error.code === 'schema' && /SQL-схему/.test(error.message) && error.snapshot.version === 3);
+  await assert.rejects(client.save(emptyState(), 7), { code: 'schema' });
+});
+
+test('old save RPC errors explain the calendar SQL migration', async () => {
+  for (const response of [
+    { code: '22023', message: 'invalid_journal' },
+    { code: '22023', message: 'calendar_migration_required' },
+  ]) {
+    const client = new CloudClient({ url, key, storage: null, fetchImpl: async () => json(response, 400) });
+    client.session = session();
+    await assert.rejects(client.save(emptyState(), 1), error => error.code === 'schema' && /SQL-схему/.test(error.message));
+  }
+});

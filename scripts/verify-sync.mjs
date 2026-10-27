@@ -154,6 +154,34 @@ try {
   assert.equal(await second.getByLabel('Депозит: Ученик синхронизации', { exact: true }).getAttribute('aria-pressed'), 'true');
   console.log('PASS: desktop → PostgreSQL → separate mobile browser: student, attendance and deposit');
 
+  await second.locator('#attendance-date').fill('2026-11-24');
+  assert.equal(await second.getByLabel('Депозит: Ученик синхронизации', {exact:true}).getAttribute('aria-pressed'), 'false');
+  await second.getByLabel('Депозит: Ученик синхронизации', {exact:true}).click();
+  await second.waitForFunction(() => !document.querySelector('#refresh-cloud').disabled);
+  await first.locator('#attendance-date').fill('2026-11-24'); await refresh(first);
+  assert.equal(await first.getByLabel('Депозит: Ученик синхронизации', {exact:true}).getAttribute('aria-pressed'), 'true');
+  await first.locator('#attendance-date').fill('2026-10-24');
+  await second.locator('#attendance-date').fill('2026-10-24');
+  assert.equal(await first.getByLabel('Депозит: Ученик синхронизации', {exact:true}).getAttribute('aria-pressed'), 'true');
+  console.log('PASS: deposits are month-specific and both months synchronize without carrying over');
+
+  // A one-day override can schedule both lesson types without merging their marks.
+  await first.locator('#customize-day').click();
+  await first.locator('#day-form [name=lecture]').check();
+  await first.locator('#day-form [name=practice]').check();
+  await first.locator('#save-day').click();
+  await first.locator('#day-dialog').waitFor({ state: 'hidden' });
+  await first.locator('#lesson-tabs [data-lesson=practice]').click();
+  await first.getByLabel('Посещаемость: Ученик синхронизации', { exact: true }).selectOption('absent');
+  await first.waitForFunction(() => !document.querySelector('#refresh-cloud').disabled);
+  await refresh(second);
+  await second.locator('#lesson-tabs [data-lesson=practice]').click();
+  assert.equal(await second.getByLabel('Посещаемость: Ученик синхронизации', { exact: true }).inputValue(), 'absent');
+  await second.locator('#lesson-tabs [data-lesson=lecture]').click();
+  assert.equal(await second.getByLabel('Посещаемость: Ученик синхронизации', { exact: true }).inputValue(), 'present');
+  await first.locator('#lesson-tabs [data-lesson=lecture]').click();
+  console.log('PASS: same-date lecture and practice have independent marks; date override syncs across devices');
+
   // Hold a stale edit dialog open so polling deliberately does not refresh this snapshot.
   await second.getByLabel('Редактировать: Ученик синхронизации', { exact: true }).click();
   await second.locator('#student-form [name=name]').fill('Устаревшее изменение');
@@ -200,6 +228,21 @@ try {
   assert.match(await second.locator('#sync-title').textContent(), /Войдите/);
   assert.deepEqual(errors, []);
   console.log('PASS: logout clears shared data and session even if logout endpoint fails; no browser JS errors');
+  const legacyContext = await browser.newContext();
+  const legacyPage = await legacyContext.newPage();
+  legacyPage.on('pageerror', error => errors.push(error.message));
+  await legacyPage.route('**/rpc/load_journal', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ revision: 7, state: { version: 1, students: [{ id:'old-1', name:'Прежний ученик', group:'A1', phone:'', joined:'2026-01-01', deposit:true }], attendance: { '2026-10-24': { 'old-1': 'present' } } } }) }));
+  await login(legacyPage);
+  assert.equal(await legacyPage.locator('#total').textContent(), '1');
+  assert.equal(await legacyPage.locator('#add-student').isDisabled(), true);
+  assert.equal(await legacyPage.locator('#export').isEnabled(), true);
+  assert.equal(await legacyPage.locator('#migration-help').isVisible(), true);
+  assert.match(await legacyPage.locator('#sync-message').textContent(), /только для просмотра/);
+  await legacyPage.locator('[data-lesson=legacy]').click();
+  assert.equal(await legacyPage.getByLabel('Посещаемость: Прежний ученик', {exact:true}).inputValue(), 'present');
+  assert.deepEqual(errors, []);
+  console.log('PASS: old SQL backend retains a read-only journal and export with a migration link');
+  await legacyContext.close();
   for (const context of contexts) await context.close();
 } finally {
   await browser?.close();

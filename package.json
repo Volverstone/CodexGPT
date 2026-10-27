@@ -9,7 +9,10 @@
     "start": "node server.js",
     "predev": "npm run build",
     "dev": "node --watch server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "preview": "npm run build && node scripts/preview.js"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  }
 }

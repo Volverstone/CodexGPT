@@ -22,6 +22,14 @@ function cloudSession(data) {
 }
 function cloudEnvelope(data) {
   if (!data || !Number.isSafeInteger(data.revision) || data.revision < 0) throw cloudError('response', 'База вернула неверный ответ. Проверьте установку SQL-схемы.');
+  // Local backups may migrate automatically; a cloud server must already speak v3.
+  // Accepting an old response here could silently drop typed attendance on save.
+  if ([1, 2].includes(data.state?.version)) {
+    const error = cloudError('schema', 'Обновите SQL-схему Supabase для календаря и помесячных пополнений, затем нажмите «Обновить». Пока прежний журнал доступен только для просмотра.');
+    try { error.snapshot = validateState(data.state); }
+    catch { throw cloudError('response', 'В базе найдены некорректные данные журнала.'); }
+    throw error;
+  }
   try { return { state: validateState(data.state), revision: data.revision }; }
   catch { throw cloudError('response', 'В базе найдены некорректные данные журнала.'); }
 }
@@ -86,6 +94,7 @@ export class CloudClient {
         if (response.status === 401 || response.status === 403) throw cloudError('auth', 'Не удалось подтвердить вход. Войдите в аккаунт снова.');
         if (data?.error_code === 'invalid_credentials' || data?.code === 'invalid_credentials') throw cloudError('auth', 'Неверная почта или пароль.');
         if (['refresh_token_not_found', 'refresh_token_already_used', 'session_not_found', 'invalid_grant'].includes(data?.error_code || data?.code || data?.error)) throw cloudError('auth', 'Сессия истекла. Войдите в аккаунт снова.');
+        if (['monthly_deposits_migration_required', 'calendar_migration_required'].includes(data?.message) || (data?.code === '22023' && data?.message === 'invalid_journal')) throw cloudError('schema', 'Обновите SQL-схему базы для помесячных пополнений. Изменения не сохранены.');
         if (data?.code === 'PGRST202' || data?.code === '42883') throw cloudError('schema', 'Облачная база ещё не настроена. Выполните SQL-схему из репозитория.');
         if (response.status === 429) throw cloudError('rate_limit', 'Слишком много запросов. Подождите немного и повторите.');
         throw cloudError('service', 'Операция не выполнена. Проверьте настройки Supabase и доступность сервиса.');
