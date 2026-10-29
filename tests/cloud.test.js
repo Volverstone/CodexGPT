@@ -161,7 +161,7 @@ test('old cloud responses require SQL migration instead of silently downgrading 
   const oldEnvelope = { state: { version: 1, students: [], attendance: {} }, revision: 7 };
   const client = new CloudClient({ url, key, storage: null, fetchImpl: async () => json(oldEnvelope) });
   client.session = session();
-  await assert.rejects(client.load(), error => error.code === 'schema' && /SQL-схему/.test(error.message) && error.snapshot.version === 3);
+  await assert.rejects(client.load(), error => error.code === 'schema' && /SQL-схему/.test(error.message) && error.snapshot.version === 4);
   await assert.rejects(client.save(emptyState(), 7), { code: 'schema' });
 });
 

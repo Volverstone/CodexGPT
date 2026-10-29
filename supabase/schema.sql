@@ -1,4 +1,4 @@
--- Calendar and monthly deposits schema v3. Run this complete script in Supabase SQL Editor.
+-- Calendar and monthly deposits schema v4. Run this complete script in Supabase SQL Editor.
 -- Existing v1 marks become legacy (their lesson type was never recorded).
 -- Re-running preserves existing journals. Future structural changes need migrations.
 -- Each authenticated account owns one journal, shared by its devices.
@@ -19,6 +19,7 @@ create table if not exists public.students (
   deposit boolean not null default false,
   primary key (user_id, id)
 );
+alter table public.students add column if not exists notes text not null default '' check (char_length(notes) <= 2000);
 create table if not exists public.attendance (
   user_id uuid not null,
   student_id text not null,
@@ -80,12 +81,12 @@ begin
   select jsonb_build_object(
     'revision', coalesce((select revision from public.journals where user_id = v_user), 0),
     'state', jsonb_build_object(
-      'version', 3,
+      'version', 4,
       'schedule', coalesce((select schedule from public.journals where user_id = v_user), '{"week":{"0":[],"1":["practice"],"2":["lecture"],"3":["practice"],"4":["lecture"],"5":[],"6":["lecture"]},"overrides":{}}'::jsonb),
       'students', coalesce((
         select jsonb_agg(jsonb_build_object(
           'id', id, 'name', name, 'group', group_name, 'phone', phone,
-          'joined', to_char(joined, 'YYYY-MM-DD'), 'deposit', deposit
+          'joined', to_char(joined, 'YYYY-MM-DD'), 'deposit', deposit, 'notes', notes
         ) order by id) from public.students where user_id = v_user
       ), '[]'::jsonb),
       'deposits', coalesce((select jsonb_object_agg(month_key, marks) from (select to_char(payment_month, 'YYYY-MM') as month_key, jsonb_object_agg(student_id, true) as marks from public.deposits where user_id = v_user group by payment_month) months), '{}'::jsonb),
@@ -125,12 +126,12 @@ begin
   if v_user is null then
     raise exception using errcode = '42501', message = 'authentication_required';
   end if;
-  if p_state->'version' is distinct from '3'::jsonb then
-    raise exception using errcode = '22023', message = 'monthly_deposits_migration_required';
+  if p_state->'version' is distinct from '4'::jsonb then
+    raise exception using errcode = '22023', message = 'student_notes_migration_required';
   end if;
   if p_state is null or octet_length(p_state::text) > 5242880
      or jsonb_typeof(p_state) is distinct from 'object'
-     or p_state->'version' is distinct from '3'::jsonb
+     or p_state->'version' is distinct from '4'::jsonb
      or jsonb_typeof(p_state->'students') is distinct from 'array'
      or jsonb_typeof(p_state->'attendance') is distinct from 'object'
      or jsonb_typeof(p_state->'deposits') is distinct from 'object'
@@ -190,6 +191,8 @@ begin
        or length(v_student->>'group') > 60 or length(btrim(v_student->>'group')) = 0
        or jsonb_typeof(v_student->'phone') is distinct from 'string'
        or length(v_student->>'phone') > 40
+       or jsonb_typeof(v_student->'notes') is distinct from 'string'
+       or char_length(v_student->>'notes') > 2000
        or jsonb_typeof(v_student->'deposit') is distinct from 'boolean'
        or jsonb_typeof(v_student->'joined') is distinct from 'string'
        or (v_student->>'joined') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then
@@ -200,9 +203,9 @@ begin
       raise exception using errcode = '22023', message = 'invalid_joined_date';
     end if;
     v_ids := array_append(v_ids, v_student->>'id');
-    insert into public.students(user_id, id, name, group_name, phone, joined, deposit)
+    insert into public.students(user_id, id, name, group_name, phone, joined, deposit, notes)
     values (v_user, v_student->>'id', btrim(v_student->>'name'), btrim(v_student->>'group'),
-            v_student->>'phone', v_joined, (v_student->>'deposit')::boolean);
+            v_student->>'phone', v_joined, (v_student->>'deposit')::boolean, v_student->>'notes');
   end loop;
 
   for v_day in select key, value from jsonb_each(p_state->'attendance') loop

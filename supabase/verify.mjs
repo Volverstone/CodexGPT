@@ -31,10 +31,10 @@ await pg.exec(schema);
 const owner = '00000000-0000-0000-0000-000000000001';
 const other = '00000000-0000-0000-0000-000000000002';
 const state = {
-  version: 3,
+  version: 4,
   deposits: {'2026-10': {'s-1': true}, '2026-11': {'s-1': true}},
   schedule: defaultSchedule(),
-  students: [{ id: 's-1', name: 'Алина Соколова', group: 'A1', phone: '+996555123456', joined: '2026-10-01', deposit: true }],
+  students: [{ id: 's-1', name: 'Алина Соколова', group: 'A1', phone: '+996555123456', joined: '2026-10-01', deposit: true, notes: 'Повторить тему\nПроверить домашнее задание' }],
   attendance: { '2026-10-24': { lecture: { 's-1': 'present' }, practice: { 's-1': 'absent' } } },
 };
 async function asUser(id, role = 'authenticated') {
@@ -52,6 +52,7 @@ assert.deepEqual(historical.state.attendance, { '2026-10-24': { legacy: { 'old-1
 assert.deepEqual(historical.state.schedule, defaultSchedule());
 assert.deepEqual(historical.state.deposits, {});
 assert.equal(historical.state.students[0].deposit, true);
+assert.equal(historical.state.students[0].notes, '');
 console.log('PASS: v1 SQL migration preserves historical marks under legacy and keeps journal revision');
 await asUser(owner);
 assert.deepEqual(await load(), { revision: 0, state: emptyState() });
@@ -71,6 +72,9 @@ for (const bad of [
   { ...state, attendance: [] },
   { ...state, version: 1 },
   { ...state, version: 2 },
+  { ...state, version: 3 },
+  { ...state, students: [{ ...state.students[0], notes: null }] },
+  { ...state, students: [{ ...state.students[0], notes: 'x'.repeat(2001) }] },
   { ...state, deposits: {'2026-09': {'s-1': true}} },
   { ...state, deposits: {'2026-10': {'s-1': false}} },
   { ...state, deposits: {'2026-13': {'s-1': true}} },
@@ -103,6 +107,12 @@ assert.equal((await save(changedMonth, 3)).revision, 4);
 assert.deepEqual((await load()).state.deposits, {'2026-10': {'s-1': true}});
 assert.equal((await save(state, 4)).revision, 5);
 console.log('PASS: monthly deposits round-trip and clearing November preserves October');
+const clearedNote = structuredClone(state); clearedNote.students[0].notes = '';
+assert.equal((await save(clearedNote, 5)).revision, 6);
+assert.equal((await load()).state.students[0].notes, '');
+assert.deepEqual((await load()).state.deposits, state.deposits);
+assert.equal((await save(state, 6)).revision, 7);
+console.log('PASS: multiline notes round-trip and clearing notes preserves monthly deposits');
 for (const table of ['journals', 'students', 'attendance', 'deposits']) {
   await assert.rejects(pg.exec(`delete from public.${table}`), { code: '42501' });
 }
@@ -116,11 +126,11 @@ assert.equal((await pg.query('select * from public.deposits')).rows.length, 0);
 const otherState = { ...state, students: [{ ...state.students[0], name: 'Другой пользователь' }] };
 assert.equal((await save(otherState, 0)).revision, 1);
 await asUser(owner);
-assert.deepEqual(await load(), { revision: 5, state });
+assert.deepEqual(await load(), { revision: 7, state });
 await pg.exec('reset role');
 await pg.exec(schema);
 await asUser(owner);
-assert.deepEqual(await load(), { revision: 5, state });
+assert.deepEqual(await load(), { revision: 7, state });
 console.log('PASS: two-user isolation with same student ID, idempotent schema preserves data');
 await asUser('', 'anon');
 await assert.rejects(load(), { code: '42501' });

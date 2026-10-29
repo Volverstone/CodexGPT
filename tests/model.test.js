@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { emptyState, validateState, setAttendance, removeStudent, validDate, getLessons, defaultSchedule, setDeposit, isDepositPaid } from '../src/model.js';
-const student = { id: 'student-1', name: 'Алина Соколова', group: 'Английский A1', phone: '+996 555 123456', joined: '2026-10-01', deposit: false };
+const student = { id: 'student-1', name: 'Алина Соколова', group: 'Английский A1', phone: '+996 555 123456', joined: '2026-10-01', deposit: false, notes: '' };
 const state = () => ({ ...emptyState(), students: [{ ...student }] });
 test('lecture and practice attendance are independent on the same day and can be cleared', () => {
   const original = state();
@@ -21,7 +21,7 @@ test('rejects attendance before joining and unknown students/types', () => {
 });
 test('v1 backup migration preserves old marks under legacy without guessing their lesson type', () => {
   const migrated = validateState({ version: 1, students: [student], attendance: { '2026-10-24': { [student.id]: 'present' } } });
-  assert.equal(migrated.version, 3);
+  assert.equal(migrated.version, 4);
   assert.deepEqual(migrated.schedule, defaultSchedule());
   assert.deepEqual(migrated.attendance['2026-10-24'], { legacy: { [student.id]: 'present' } });
 });
@@ -87,4 +87,14 @@ test('undated legacy deposits are preserved but never silently assigned to a mon
   for (const marks of [{ '2026-13': {[student.id]: true}}, {'2026-10': {unknown: true}}, {'2026-10': {[student.id]: false}}, {'2026-09': {[student.id]: true}}]) {
     assert.throws(() => validateState({ ...state(), deposits: marks }));
   }
+});
+
+test('student notes migrate, preserve paragraphs and backup, and reject invalid text', () => {
+  const legacy = { ...state(), version: 3, students: [{ ...student }] };
+  delete legacy.students[0].notes;
+  assert.equal(validateState(legacy).students[0].notes, '');
+  const data = state(); data.students[0].notes = 'Первая строка\nВторая строка <b>текст</b>';
+  assert.deepEqual(validateState(JSON.parse(JSON.stringify(data))), data);
+  assert.equal(setDeposit(data, student.id, '2026-10', true).students[0].notes, data.students[0].notes);
+  for (const notes of [null, 12, 'a'.repeat(2001)]) assert.throws(() => validateState({...data, students:[{...student, notes}]}));
 });

@@ -35,14 +35,16 @@ export function getLessons(state, date) {
   if (Object.hasOwn(schedule.overrides, date)) return [...schedule.overrides[date]];
   return [...schedule.week[new Date(`${date}T12:00:00Z`).getUTCDay()]];
 }
-export function emptyState() { return { version: 3, students: [], deposits: {}, schedule: defaultSchedule(), attendance: {} }; }
+export function emptyState() { return { version: 4, students: [], deposits: {}, schedule: defaultSchedule(), attendance: {} }; }
 export function validateState(data) {
-  if (!isRecord(data) || ![1, 2, 3].includes(data.version) || !Array.isArray(data.students) || !isRecord(data.attendance)) throw new Error('Неверный формат резервной копии.');
+  if (!isRecord(data) || ![1, 2, 3, 4].includes(data.version) || !Array.isArray(data.students) || !isRecord(data.attendance)) throw new Error('Неверный формат резервной копии.');
   const ids = new Set();
   const students = data.students.map(s => {
     if (!s || typeof s.id !== 'string' || !/^[a-zA-Z0-9-]{1,100}$/.test(s.id) || ids.has(s.id) || typeof s.name !== 'string' || !s.name.trim() || s.name.length > 100 || typeof s.group !== 'string' || !s.group.trim() || s.group.length > 60 || typeof s.phone !== 'string' || s.phone.length > 40 || !validDate(s.joined) || typeof s.deposit !== 'boolean') throw new Error('Некорректные данные ученика.');
+    const notes = s.notes === undefined && data.version < 4 ? '' : s.notes;
+    if (typeof notes !== 'string' || notes.length > 2000) throw new Error('Заметка должна быть текстом не длиннее 2000 символов.');
     ids.add(s.id);
-    return { id: s.id, name: s.name.trim(), group: s.group.trim(), phone: s.phone, joined: s.joined, deposit: s.deposit };
+    return { id: s.id, name: s.name.trim(), group: s.group.trim(), phone: s.phone, joined: s.joined, deposit: s.deposit, notes };
   });
   const joined = new Map(students.map(student => [student.id, student.joined]));
   const schedule = data.version === 1 ? defaultSchedule() : validateSchedule(data.schedule);
@@ -61,7 +63,7 @@ export function validateState(data) {
     }
   }
   const deposits = {};
-  if (data.version === 3) {
+  if (data.version >= 3) {
     if (!isRecord(data.deposits)) throw new Error('Некорректная история пополнений.');
     for (const [month, marks] of Object.entries(data.deposits)) {
       if (!validDate(`${month}-01`) || !/^[0-9]{4}-[0-9]{2}$/.test(month) || !isRecord(marks)) throw new Error('Некорректный месяц пополнения.');
@@ -73,7 +75,7 @@ export function validateState(data) {
     }
   }
   // Undated legacy student.deposit flags remain in the backup, never guessed into a month.
-  return { version: 3, students, schedule, attendance, deposits };
+  return { version: 4, students, schedule, attendance, deposits };
 }
 export function setAttendance(state, id, date, status, type = 'lecture') {
   const student = state.students.find(s => s.id === id);

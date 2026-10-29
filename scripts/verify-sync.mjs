@@ -182,6 +182,14 @@ try {
   await first.locator('#lesson-tabs [data-lesson=lecture]').click();
   console.log('PASS: same-date lecture and practice have independent marks; date override syncs across devices');
 
+  await first.getByLabel('Заметки: Ученик синхронизации', {exact:true}).click();
+  await first.locator('#student-notes').fill('Повторить тему\nПроверить домашнюю работу');
+  await first.locator('#save-notes').click(); await first.locator('#notes-dialog').waitFor({state:'hidden'});
+  await refresh(second);
+  await second.getByLabel('Заметки: Ученик синхронизации', {exact:true}).click();
+  assert.equal(await second.locator('#student-notes').inputValue(), 'Повторить тему\nПроверить домашнюю работу');
+  await second.locator('#notes-dialog [data-close]').first().click();
+  console.log('PASS: student notes synchronize between separate devices');
   // Hold a stale edit dialog open so polling deliberately does not refresh this snapshot.
   await second.getByLabel('Редактировать: Ученик синхронизации', { exact: true }).click();
   await second.locator('#student-form [name=name]').fill('Устаревшее изменение');

@@ -38,6 +38,7 @@ let calendarMonth = today().slice(0, 7);
 let customDate = null;
 let view = 'attendance';
 let editingId = null;
+let notesStudentId = null;
 let toastTimer;
 const palette = ['sage', 'lavender', 'sand', 'rose'];
 function toast(message) {
@@ -78,7 +79,8 @@ function monthName(month) { return new Intl.DateTimeFormat('ru', { month: 'long'
 function formatDate(date) { return new Intl.DateTimeFormat('ru', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(`${date}T12:00:00`)); }
 function updateControls() {
   const locked = !!cloudConfigError || !!(cloud && (!cloudReady || !cloud.session || cloudBusy));
-  document.querySelectorAll('#add-student, #empty-add, #import, [data-edit], [data-deposit], [data-attendance], #save-student, #delete-student, #configure-week, #customize-day, #save-week, #save-day, #reset-day').forEach(element => { element.disabled = locked || (element.hasAttribute('data-deposit') && state.students.find(s => s.id === element.dataset.deposit)?.joined.slice(0, 7) > selectedMonth()); });
+  document.querySelectorAll('#add-student, #empty-add, #import, [data-edit], [data-deposit], [data-attendance], #save-student, #delete-student, #configure-week, #customize-day, #save-week, #save-day, #reset-day, [data-notes], #save-notes').forEach(element => { element.disabled = locked || (element.hasAttribute('data-deposit') && state.students.find(s => s.id === element.dataset.deposit)?.joined.slice(0, 7) > selectedMonth()); });
+  $('#student-notes').disabled = cloudBusy;
   document.querySelectorAll('#close-dialog, #cancel-dialog, #signout, #close-account, [data-close]').forEach(element => { element.disabled = cloudBusy; });
 }
 function handleCloudError(error) {
@@ -86,7 +88,7 @@ function handleCloudError(error) {
   if (needsMigration) { cloudReady = false; if (error.snapshot) state = error.snapshot; }
   if (cloud && !cloud.session) {
     cloudReady = false; state = emptyState();
-    $('#student-dialog').close(); $('#week-dialog').close(); $('#day-dialog').close();
+    $('#student-dialog').close(); $('#notes-dialog').close(); $('#week-dialog').close(); $('#day-dialog').close();
   }
   cloudMessage = error.message;
 }
@@ -151,10 +153,10 @@ function render() {
     $('#reset-filters')?.addEventListener('click', () => { $('#search').value = ''; $('#group-filter').value = ''; $('#deposit-filter').value = ''; render(); });
     updateControls(); return;
   }
-  $('#student-list').innerHTML = `<div class="table-wrap"><table><thead><tr><th>Ученик</th><th>Группа</th><th>${view === 'students' ? 'Присоединился' : 'Посещаемость'}</th><th>Депозит<small class="column-month">${escape(monthName(month))}</small></th><th><span class="sr-only">Редактировать</span></th></tr></thead><tbody>${students.map(s => {
+  $('#student-list').innerHTML = `<div class="table-wrap"><table><thead><tr><th>Ученик</th><th>Группа</th><th>${view === 'students' ? 'Присоединился' : 'Посещаемость'}</th><th>Депозит<small class="column-month">${escape(monthName(month))}</small></th><th><span class="sr-only">Заметки и редактирование</span></th></tr></thead><tbody>${students.map(s => {
     const index = groups.indexOf(s.group) % palette.length;
     const initials = s.name.split(/\s+/).slice(0, 2).map(n => n[0]).join('');
-    return `<tr><td><button class="student-name" data-edit="${s.id}"><span class="avatar ${palette[index]}">${escape(initials)}</span><span><strong>${escape(s.name)}</strong><small>${escape(s.phone || 'Телефон не указан')}</small></span></button></td><td><span class="group-tag ${palette[index]}">${escape(s.group)}</span></td><td>${view === 'students' ? `<span class="joined-date">${formatDate(s.joined)}</span>` : !activeLesson ? '<span class="not-joined">Нет занятия</span>' : s.joined > date ? '<span class="not-joined">Ещё не присоединился</span>' : `<select class="attendance-select ${marks[s.id] || ''}" data-attendance="${s.id}" aria-label="Посещаемость: ${escape(s.name)}"><option value="">Без отметки</option><option value="present" ${marks[s.id] === 'present' ? 'selected' : ''}>✓ Присутствует</option><option value="absent" ${marks[s.id] === 'absent' ? 'selected' : ''}>− Отсутствует</option><option value="excused" ${marks[s.id] === 'excused' ? 'selected' : ''}>Уважительная</option></select>`}</td><td><button class="deposit-badge ${isDepositPaid(state, s.id, month) ? 'paid' : ''}" data-deposit="${s.id}" aria-label="Депозит: ${escape(s.name)}" title="За ${escape(monthName(month))}" aria-pressed="${isDepositPaid(state, s.id, month)}">${s.joined.slice(0, 7) > month ? 'Ещё не учится' : isDepositPaid(state, s.id, month) ? '✓ Пополнен' : '○ Не пополнен'}</button></td><td><button class="edit-button" data-edit="${s.id}" aria-label="Редактировать: ${escape(s.name)}">✎</button></td></tr>`;
+    return `<tr><td><button class="student-name" data-edit="${s.id}"><span class="avatar ${palette[index]}">${escape(initials)}</span><span><strong>${escape(s.name)}</strong><small>${escape(s.phone || 'Телефон не указан')}</small></span></button></td><td><span class="group-tag ${palette[index]}">${escape(s.group)}</span></td><td>${view === 'students' ? `<span class="joined-date">${formatDate(s.joined)}</span>` : !activeLesson ? '<span class="not-joined">Нет занятия</span>' : s.joined > date ? '<span class="not-joined">Ещё не присоединился</span>' : `<select class="attendance-select ${marks[s.id] || ''}" data-attendance="${s.id}" aria-label="Посещаемость: ${escape(s.name)}"><option value="">Без отметки</option><option value="present" ${marks[s.id] === 'present' ? 'selected' : ''}>✓ Присутствует</option><option value="absent" ${marks[s.id] === 'absent' ? 'selected' : ''}>− Отсутствует</option><option value="excused" ${marks[s.id] === 'excused' ? 'selected' : ''}>Уважительная</option></select>`}</td><td><button class="deposit-badge ${isDepositPaid(state, s.id, month) ? 'paid' : ''}" data-deposit="${s.id}" aria-label="Депозит: ${escape(s.name)}" title="За ${escape(monthName(month))}" aria-pressed="${isDepositPaid(state, s.id, month)}">${s.joined.slice(0, 7) > month ? 'Ещё не учится' : isDepositPaid(state, s.id, month) ? '✓ Пополнен' : '○ Не пополнен'}</button></td><td><div class="row-actions"><button class="notes-button ${s.notes ? 'has-notes' : ''}" data-notes="${s.id}" aria-label="Заметки: ${escape(s.name)}" title="${s.notes ? 'Открыть заметку' : 'Добавить заметку'}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>${s.notes ? '<i class="note-indicator"></i>' : ''}</button><button class="edit-button" data-edit="${s.id}" aria-label="Редактировать: ${escape(s.name)}">✎</button></div></td></tr>`;
   }).join('')}</tbody></table></div>`;
   updateControls();
 }
@@ -172,6 +174,30 @@ function openStudent(id = null) {
   form.elements.deposit.disabled = form.elements.joined.value.slice(0, 7) > selectedMonth();
   $('#student-dialog').showModal();
 }
+function openNotes(id) {
+  if (cloudBusy || (cloud && !cloudReady)) return;
+  const student = state.students.find(s => s.id === id);
+  if (!student) return;
+  notesStudentId = id;
+  $('#notes-student-name').textContent = student.name;
+  $('#student-notes').value = student.notes;
+  $('#notes-counter').textContent = `${student.notes.length} / 2000`;
+  $('#notes-error').textContent = '';
+  $('#notes-dialog').showModal();
+  $('#student-notes').focus();
+}
+$('#student-notes').addEventListener('input', event => { $('#notes-counter').textContent = `${event.target.value.length} / 2000`; });
+async function saveNotes() {
+  if (cloudBusy || !notesStudentId) return;
+  const notes = $('#student-notes').value.trim();
+  if (notes.length > 2000) { $('#notes-error').textContent = 'Максимум 2000 символов.'; return; }
+  if (!state.students.some(s => s.id === notesStudentId)) { $('#notes-error').textContent = 'Ученик больше не найден. Обновите журнал.'; return; }
+  const next = { ...state, students: state.students.map(s => s.id === notesStudentId ? { ...s, notes } : s) };
+  if (await save(next)) { $('#notes-dialog').close(); toast(notes.trim() ? 'Заметка сохранена' : 'Заметка удалена'); }
+  else $('#notes-error').textContent = 'Не удалось сохранить. Проверьте сообщение о синхронизации.';
+}
+$('#save-notes').addEventListener('click', event => { event.preventDefault(); saveNotes(); });
+$('#notes-form').addEventListener('submit', event => { event.preventDefault(); saveNotes(); });
 function confirmAction(title, message) {
   return new Promise(resolve => {
     $('#confirm-title').textContent = title; $('#confirm-text').textContent = message;
@@ -297,6 +323,7 @@ document.querySelectorAll('[data-view]').forEach(button => button.addEventListen
 $('#add-student').addEventListener('click', () => openStudent());
 for (const id of ['close-dialog', 'cancel-dialog']) $(`#${id}`).addEventListener('click', () => $('#student-dialog').close());
 $('#student-list').addEventListener('click', async event => {
+  const note = event.target.closest('[data-notes]'); if (note) openNotes(note.dataset.notes);
   const edit = event.target.closest('[data-edit]'); if (edit) openStudent(edit.dataset.edit);
   const deposit = event.target.closest('[data-deposit]');
   if (deposit) await save(setDeposit(state, deposit.dataset.deposit, selectedMonth(), !isDepositPaid(state, deposit.dataset.deposit, selectedMonth())));
@@ -308,7 +335,7 @@ $('#student-list').addEventListener('change', async event => {
 async function submitStudent(form) {
   // randomUUID is unavailable on plain HTTP (e.g. a phone accessing a LAN server).
   const id = editingId || (globalThis.crypto?.randomUUID ? crypto.randomUUID() : `s-${Date.now().toString(36)}-${Array.from(crypto.getRandomValues(new Uint8Array(12)), n => n.toString(16).padStart(2, '0')).join('')}`);
-  const student = { id, name: form.elements.name.value.trim(), group: form.elements.group.value.trim(), phone: form.elements.phone.value.trim(), joined: form.elements.joined.value, deposit: state.students.find(s => s.id === id)?.deposit || false };
+  const student = { id, name: form.elements.name.value.trim(), group: form.elements.group.value.trim(), phone: form.elements.phone.value.trim(), joined: form.elements.joined.value, deposit: state.students.find(s => s.id === id)?.deposit || false, notes: state.students.find(s => s.id === id)?.notes || '' };
   const historicalDates = Object.entries(state.attendance).filter(([, lessons]) => Object.values(lessons).some(entries => entries[student.id])).map(([date]) => date);
   if (historicalDates.some(date => date < student.joined)) { $('#form-error').textContent = 'До этой даты уже есть отметки. Сначала удалите их или выберите более раннюю дату присоединения.'; return; }
   try {
