@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { emptyState, validateState, setAttendance, removeStudent, validDate, getLessons, defaultSchedule, setDeposit, isDepositPaid } from '../src/model.js';
+import { emptyState, validateState, setAttendance, removeStudent, validDate, getLessons, defaultSchedule, setDeposit, isDepositPaid, getAttendanceStatus } from '../src/model.js';
 const student = { id: 'student-1', name: 'Алина Соколова', group: 'Английский A1', phone: '+996 555 123456', joined: '2026-10-01', deposit: false, notes: '' };
 const state = () => ({ ...emptyState(), students: [{ ...student }] });
 test('lecture and practice attendance are independent on the same day and can be cleared', () => {
@@ -97,4 +97,28 @@ test('student notes migrate, preserve paragraphs and backup, and reject invalid 
   assert.deepEqual(validateState(JSON.parse(JSON.stringify(data))), data);
   assert.equal(setDeposit(data, student.id, '2026-10', true).students[0].notes, data.students[0].notes);
   for (const notes of [null, 12, 'a'.repeat(2001)]) assert.throws(() => validateState({...data, students:[{...student, notes}]}));
+});
+
+test('unmarked scheduled lessons default to absent on today and past days, never in future', () => {
+  const data = state(); const initial = JSON.stringify(data);
+  assert.equal(getAttendanceStatus(data, student.id, '2026-10-27', 'lecture', '2026-10-26'), null);
+  assert.equal(getAttendanceStatus(data, student.id, '2026-10-27', 'lecture', '2026-10-27'), 'absent');
+  assert.equal(getAttendanceStatus(data, student.id, '2026-10-27', 'lecture', '2026-10-28'), 'absent');
+  assert.equal(JSON.stringify(data), initial, 'viewing inferred absences must not write or mutate stored marks');
+});
+test('default absence excludes days off, unscheduled types, pre-joining dates, and legacy marks', () => {
+  const data = state();
+  assert.equal(getAttendanceStatus(data, student.id, '2026-10-30', 'lecture', '2026-11-01'), null);
+  assert.equal(getAttendanceStatus(data, student.id, '2026-10-27', 'practice', '2026-11-01'), null);
+  assert.equal(getAttendanceStatus(data, student.id, '2026-09-29', 'lecture', '2026-11-01'), null);
+  assert.equal(getAttendanceStatus(data, student.id, '2026-10-27', 'legacy', '2026-11-01'), null);
+  data.schedule.overrides['2026-10-27'] = [];
+  assert.equal(getAttendanceStatus(data, student.id, '2026-10-27', 'lecture', '2026-11-01'), null);
+});
+test('manual present/excused always override the default separately for lecture and practice', () => {
+  let data = state(); data.schedule.overrides['2026-10-27'] = ['lecture', 'practice'];
+  data = setAttendance(data, student.id, '2026-10-27', 'present', 'lecture');
+  data = setAttendance(data, student.id, '2026-10-27', 'excused', 'practice');
+  assert.equal(getAttendanceStatus(data, student.id, '2026-10-27', 'lecture', '2026-10-28'), 'present');
+  assert.equal(getAttendanceStatus(data, student.id, '2026-10-27', 'practice', '2026-10-28'), 'excused');
 });

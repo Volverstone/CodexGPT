@@ -16,5 +16,5 @@ const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const output = html.replace('<title>Класс — журнал учеников</title>', '<title>Предпросмотр календаря — Класс</title>')
   .replace('<script>(() => {', () => `<script>globalThis.CLASSROOM_PREVIEW = ${JSON.stringify(demo)};\n(() => {`)
   .replace('href="/" class="brand"', 'href="#" class="brand"');
-await Promise.all(['preview-calendar.html', 'preview-deposits.html', 'preview-notes.html'].map(file => writeFile(new URL(`../${file}`, import.meta.url), output)));
+await Promise.all(['preview-calendar.html', 'preview-deposits.html', 'preview-notes.html', 'preview-attendance.html'].map(file => writeFile(new URL(`../${file}`, import.meta.url), output)));
 console.log('Preview ready: preview-calendar.html — fictional data, memory-only, no cloud connection.');

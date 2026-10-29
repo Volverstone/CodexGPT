@@ -105,3 +105,12 @@ export function setDeposit(state, id, month, paid) {
   else delete deposits[month][id];
   return { ...state, deposits };
 }
+
+// Missing marks are a default, not fabricated database writes.
+export function getAttendanceStatus(state, id, date, type, asOf = today()) {
+  const student = state.students.find(s => s.id === id);
+  if (!student || student.joined > date || !validDate(date) || !validDate(asOf) || ![...lessonTypes, 'legacy'].includes(type)) return null;
+  const explicit = state.attendance[date]?.[type]?.[id];
+  if (explicit) return explicit;
+  return date <= asOf && lessonTypes.includes(type) && getLessons(state, date).includes(type) ? 'absent' : null;
+}

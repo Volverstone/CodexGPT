@@ -180,6 +180,15 @@ function setDeposit(state, id, month, paid) {
   return { ...state, deposits };
 }
 
+// Missing marks are a default, not fabricated database writes.
+function getAttendanceStatus(state, id, date, type, asOf = today()) {
+  const student = state.students.find(s => s.id === id);
+  if (!student || student.joined > date || !validDate(date) || !validDate(asOf) || ![...lessonTypes, 'legacy'].includes(type)) return null;
+  const explicit = state.attendance[date]?.[type]?.[id];
+  if (explicit) return explicit;
+  return date <= asOf && lessonTypes.includes(type) && getLessons(state, date).includes(type) ? 'absent' : null;
+}
+
 function cloudError(code, message) {
   const error = new Error(message);
   error.code = code;
@@ -415,6 +424,7 @@ let customDate = null;
 let view = 'attendance';
 let editingId = null;
 let notesStudentId = null;
+function attendanceAsOf() { return isPreview ? '2027-03-27' : today(); }
 let toastTimer;
 const palette = ['sage', 'lavender', 'sand', 'rose'];
 function toast(message) {
@@ -472,7 +482,7 @@ function render() {
   const signedIn = !!cloud?.session;
   $('#migration-help').hidden = !needsMigration;
   $('#sync-title').textContent = isPreview ? 'Предпросмотр изменений · демо-журнал' : cloud ? (signedIn ? 'Общий журнал' : 'Войдите для синхронизации') : 'Локальный журнал';
-  $('#sync-message').textContent = isPreview ? 'Можно менять расписание и отмечать учеников. Здесь только вымышленные данные; рабочий сайт и GitHub не изменены.' : cloudConfigError || (cloud
+  $('#sync-message').textContent = isPreview ? 'Демо-дата — 27.03.2027. Можно менять расписание и отмечать учеников. Здесь только вымышленные данные; рабочий сайт и GitHub не изменены.' : cloudConfigError || (cloud
     ? (cloudMessage || (signedIn ? 'Изменения загружаются автоматически каждые 10 секунд.' : 'Один аккаунт на компьютере, Android и iPhone. Старые локальные записи можно экспортировать перед входом.'))
     : 'Облачная база не подключена. На разных устройствах записи пока отдельные.');
   $('#account-button').textContent = signedIn ? 'Мой аккаунт' : 'Вход и синхронизация';
@@ -489,6 +499,7 @@ function render() {
   const available = availableLessons(date);
   if (!available.includes(activeLesson)) activeLesson = available[0] || null;
   const marks = state.attendance[date]?.[activeLesson] || {};
+  const effective = Object.fromEntries(state.students.map(s => [s.id, getAttendanceStatus(state, s.id, date, activeLesson, attendanceAsOf())]));
   renderCalendar(date);
   const dateCaption = `за ${numericDate(date)}${activeLesson ? ' · ' + lessonLabels[activeLesson] : ''}`;
   $('#present-date').textContent = dateCaption;
@@ -502,9 +513,11 @@ function render() {
   $('#total').textContent = state.students.length;
   $('#nav-count').textContent = state.students.length;
   $('#group-summary').textContent = `Групп: ${groups.length}`;
-  $('#present').innerHTML = `${eligible.filter(s => marks[s.id] === 'present').length} <span>учеников</span>`;
-  $('#absent').innerHTML = `${eligible.filter(s => marks[s.id] === 'absent').length} <span>учеников</span>`;
-  $('#unmarked').textContent = !activeLesson ? 'Выходной день' : `Без отметки: ${eligible.filter(s => !marks[s.id]).length} · Уважительная: ${eligible.filter(s => marks[s.id] === 'excused').length}`;
+  $('#present').innerHTML = `${eligible.filter(s => effective[s.id] === 'present').length} <span>учеников</span>`;
+  $('#absent').innerHTML = `${eligible.filter(s => effective[s.id] === 'absent').length} <span>учеников</span>`;
+  const defaultsApply = date <= attendanceAsOf() && getLessons(state, date).includes(activeLesson);
+  const pendingCount = eligible.filter(s => defaultsApply ? !marks[s.id] : !effective[s.id]).length;
+  $('#unmarked').textContent = !activeLesson ? 'Выходной день' : `${defaultsApply ? 'По умолчанию' : 'Без отметки'}: ${pendingCount} · Уважительная: ${eligible.filter(s => effective[s.id] === 'excused').length}`;
   const month = selectedMonth();
   const monthStudents = state.students.filter(s => s.joined.slice(0, 7) <= month);
   const paid = monthStudents.filter(s => isDepositPaid(state, s.id, month)).length;
@@ -532,7 +545,7 @@ function render() {
   $('#student-list').innerHTML = `<div class="table-wrap"><table><thead><tr><th>Ученик</th><th>Группа</th><th>${view === 'students' ? 'Присоединился' : 'Посещаемость'}</th><th>Депозит<small class="column-month">${escape(monthName(month))}</small></th><th><span class="sr-only">Заметки и редактирование</span></th></tr></thead><tbody>${students.map(s => {
     const index = groups.indexOf(s.group) % palette.length;
     const initials = s.name.split(/\s+/).slice(0, 2).map(n => n[0]).join('');
-    return `<tr><td><button class="student-name" data-edit="${s.id}"><span class="avatar ${palette[index]}">${escape(initials)}</span><span><strong>${escape(s.name)}</strong><small>${escape(s.phone || 'Телефон не указан')}</small></span></button></td><td><span class="group-tag ${palette[index]}">${escape(s.group)}</span></td><td>${view === 'students' ? `<span class="joined-date">${formatDate(s.joined)}</span>` : !activeLesson ? '<span class="not-joined">Нет занятия</span>' : s.joined > date ? '<span class="not-joined">Ещё не присоединился</span>' : `<select class="attendance-select ${marks[s.id] || ''}" data-attendance="${s.id}" aria-label="Посещаемость: ${escape(s.name)}"><option value="">Без отметки</option><option value="present" ${marks[s.id] === 'present' ? 'selected' : ''}>✓ Присутствует</option><option value="absent" ${marks[s.id] === 'absent' ? 'selected' : ''}>− Отсутствует</option><option value="excused" ${marks[s.id] === 'excused' ? 'selected' : ''}>Уважительная</option></select>`}</td><td><button class="deposit-badge ${isDepositPaid(state, s.id, month) ? 'paid' : ''}" data-deposit="${s.id}" aria-label="Депозит: ${escape(s.name)}" title="За ${escape(monthName(month))}" aria-pressed="${isDepositPaid(state, s.id, month)}">${s.joined.slice(0, 7) > month ? 'Ещё не учится' : isDepositPaid(state, s.id, month) ? '✓ Пополнен' : '○ Не пополнен'}</button></td><td><div class="row-actions"><button class="notes-button ${s.notes ? 'has-notes' : ''}" data-notes="${s.id}" aria-label="Заметки: ${escape(s.name)}" title="${s.notes ? 'Открыть заметку' : 'Добавить заметку'}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>${s.notes ? '<i class="note-indicator"></i>' : ''}</button><button class="edit-button" data-edit="${s.id}" aria-label="Редактировать: ${escape(s.name)}">✎</button></div></td></tr>`;
+    return `<tr><td><button class="student-name" data-edit="${s.id}"><span class="avatar ${palette[index]}">${escape(initials)}</span><span><strong>${escape(s.name)}</strong><small>${escape(s.phone || 'Телефон не указан')}</small></span></button></td><td><span class="group-tag ${palette[index]}">${escape(s.group)}</span></td><td>${view === 'students' ? `<span class="joined-date">${formatDate(s.joined)}</span>` : !activeLesson ? '<span class="not-joined">Нет занятия</span>' : s.joined > date ? '<span class="not-joined">Ещё не присоединился</span>' : `<select class="attendance-select ${effective[s.id] || ''}" data-attendance="${s.id}" aria-label="Посещаемость: ${escape(s.name)}">${date <= attendanceAsOf() && getLessons(state, date).includes(activeLesson) ? '' : '<option value="">Без отметки</option>'}<option value="present" ${effective[s.id] === 'present' ? 'selected' : ''}>✓ Присутствует</option><option value="absent" ${effective[s.id] === 'absent' ? 'selected' : ''}>− Отсутствует</option><option value="excused" ${effective[s.id] === 'excused' ? 'selected' : ''}>Уважительная</option></select>`}</td><td><button class="deposit-badge ${isDepositPaid(state, s.id, month) ? 'paid' : ''}" data-deposit="${s.id}" aria-label="Депозит: ${escape(s.name)}" title="За ${escape(monthName(month))}" aria-pressed="${isDepositPaid(state, s.id, month)}">${s.joined.slice(0, 7) > month ? 'Ещё не учится' : isDepositPaid(state, s.id, month) ? '✓ Пополнен' : '○ Не пополнен'}</button></td><td><div class="row-actions"><button class="notes-button ${s.notes ? 'has-notes' : ''}" data-notes="${s.id}" aria-label="Заметки: ${escape(s.name)}" title="${s.notes ? 'Открыть заметку' : 'Добавить заметку'}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>${s.notes ? '<i class="note-indicator"></i>' : ''}</button><button class="edit-button" data-edit="${s.id}" aria-label="Редактировать: ${escape(s.name)}">✎</button></div></td></tr>`;
   }).join('')}</tbody></table></div>`;
   updateControls();
 }
@@ -629,6 +642,7 @@ function renderCalendar(date) {
     : scheduled.length > 1 ? 'Два занятия в один день — два независимых списка посещаемости.'
     : !scheduled.includes(activeLesson) ? 'Занятие убрано из расписания, но его отметки сохранены.'
     : 'Отмечайте присутствие учеников на выбранном занятии ниже.';
+  if (activeLesson && date <= attendanceAsOf() && scheduled.includes(activeLesson)) $('#lesson-hint').textContent += ' Без отметки — отсутствует по умолчанию. Присутствие и уважительную причину отметьте вручную.';
   $('#weekly-summary').textContent = lessonTypes.map(type => {
     const names = [1,2,3,4,5,6,0].filter(day => state.schedule.week[day].includes(type)).map(day => dayNames[day]);
     return `${type === 'lecture' ? 'Лекции' : 'Практика'}: ${names.join(', ') || 'не назначены'}`;
@@ -818,6 +832,18 @@ $('#refresh-cloud').addEventListener('click', () => refreshCloud({ manual: true 
 window.addEventListener('online', () => refreshCloud());
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshCloud(); });
 setInterval(() => { if (!document.hidden) refreshCloud(); }, 10000);
+// Recompute the default after a date rollover, including local/offline journals.
+let lastAttendanceDay = today();
+function refreshAttendanceDay() {
+  if (today() !== lastAttendanceDay) { lastAttendanceDay = today(); render(); }
+}
+function scheduleDayRefresh() {
+  const now = new Date();
+  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  setTimeout(() => { refreshAttendanceDay(); scheduleDayRefresh(); }, midnight - now + 100);
+}
+scheduleDayRefresh();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshAttendanceDay(); });
 if (cloud?.session) { state = emptyState(); refreshCloud({ manual: true }); }
 
 render();
